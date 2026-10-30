@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Explicit html.light / html.dark — overrides Tailwind OS dark :root tokens */
+html {
+  color-scheme: light;
+  --background: #f4f1eb;
+  --foreground: #1c1917;
+  --surface: #ffffff;
+  --muted: #78716c;
+}
+
+html.dark {
+  color-scheme: dark;
+  --background: #0c0a09;
+  --foreground: #fafaf9;
+  --surface: #1c1917;
+  --muted: #a8a29e;
+}
+
+html.light {
+  color-scheme: light;
+  --background: #f4f1eb;
+  --foreground: #1c1917;
+  --surface: #ffffff;
+  --muted: #78716c;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-muted: var(--muted);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes expand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.25s ease-out both;
+}
+
+.animate-expand-in {
+  animation: expand-in 0.28s ease-out both;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-expand-in {
+    animation: none;
+  }
+
+  body {
+    transition: none;
+  }
+}
+
+/* Let both thumbs receive drags; full-width inputs otherwise block the lower one */
+.range-thumb {
+  pointer-events: none;
+}
+
+.range-thumb::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  pointer-events: auto;
+  height: 16px;
+  width: 16px;
+  margin-top: -6px;
+  border-radius: 9999px;
+  border: 2px solid rgb(16 185 129);
+  background: white;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.12);
+}
+
+html.dark .range-thumb::-webkit-slider-thumb {
+  background: rgb(28 25 23);
+  border-color: rgb(52 211 153);
+}
+
+.range-thumb::-moz-range-thumb {
+  pointer-events: auto;
+  height: 14px;
+  width: 14px;
+  border-radius: 9999px;
+  border: 2px solid rgb(16 185 129);
+  background: white;
+}
+
+.range-thumb::-webkit-slider-runnable-track {
+  height: 6px;
+  background: transparent;
+}
+
+.range-thumb::-moz-range-track {
+  height: 6px;
+  background: transparent;
+}
