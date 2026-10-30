@@ -14,7 +14,12 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const siteUrl = process.env.GITHUB_PAGES
+  ? "https://arunshaik2001.github.io/takehome-comp"
+  : "http://localhost:3000";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: "Takehome Comp | India salary estimates after tax",
   description:
     "Independent tool: LeetCode Discuss compensation posts with estimated monthly net pay after tax, PF, and deductions. Not affiliated with LeetCode.",
@@ -26,8 +31,11 @@ export const metadata: Metadata = {
     type: "website",
   },
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml" }],
-    apple: [{ url: "/icon.svg", type: "image/svg+xml" }],
+    icon: [
+      { url: "favicon.ico", sizes: "any" },
+      { url: "icon.svg", type: "image/svg+xml" },
+    ],
+    apple: [{ url: "icon.svg", type: "image/svg+xml" }],
   },
 };
 
