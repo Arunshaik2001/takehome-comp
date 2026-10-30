@@ -32,7 +32,7 @@ function incomeTaxNewRegime(taxableIncome: number): number {
     tax = Math.max(0, tax - 60_000);
   }
 
-  tax *= 1.04;
+  tax *= 1.04; // Health & education cess (4% on income tax)
   return Math.round(tax);
 }
 
@@ -126,8 +126,8 @@ export function estimateIndiaTakeHome(params: {
 
   const tdsNote =
     joiningAnnual > 0
-      ? "Taxable salary includes parsed joining bonus; after ₹75k standard deduction"
-      : "After ₹75k standard deduction; excludes HRA/80C beyond PF";
+      ? "Taxable salary includes parsed joining bonus; after ₹75k standard deduction; includes 4% health & education cess on tax"
+      : "After ₹75k standard deduction; excludes HRA/80C beyond PF; includes 4% health & education cess on tax";
 
   const lines: DeductionLine[] = [
     {
@@ -144,7 +144,7 @@ export function estimateIndiaTakeHome(params: {
     },
     {
       id: "tds",
-      label: "Income tax (TDS, new regime FY25–26)",
+      label: "Income tax (TDS, new regime FY25–26, incl. 4% cess)",
       amountAnnual: incomeTax,
       note: tdsNote,
     },

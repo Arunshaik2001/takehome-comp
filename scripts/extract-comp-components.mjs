@@ -11,6 +11,22 @@ function parseNumeric(s) {
   return m ? parseFloat(m[1]) : null;
 }
 
+/** Parse ₹ / Rs amounts (incl. 70,00,000) to LPA. */
+function inrFragmentToLpa(fragment) {
+  if (!fragment) return null;
+  const f = fragment.trim();
+  if (/crore|\bcr\b/i.test(f)) {
+    const n = parseNumeric(f);
+    return n != null ? roundLpa(n * 100) : null;
+  }
+  const num = parseNumeric(f);
+  if (num == null) return null;
+  if (/lpa|lakh|lac|\bl\b/i.test(f) && num < 500) return roundLpa(num);
+  if (num >= 100_000) return roundLpa(num / 100_000);
+  if (num < 500) return roundLpa(num);
+  return null;
+}
+
 /** Turn a captured amount fragment into LPA (INR). */
 function amountFragmentToLpa(fragment, baseLpa, { perYearUsd = false, totalUsdVestYears = null } = {}) {
   if (!fragment) return null;
@@ -51,15 +67,8 @@ function amountFragmentToLpa(fragment, baseLpa, { perYearUsd = false, totalUsdVe
   }
 
   if (/lpa|lakh|lac|\bl\b(?!\w)/i.test(f) || /₹|inr|rs\.?/i.test(f)) {
-    const num = parseNumeric(f);
-    if (num == null) return null;
-    if (/lpa|lakh|lac|\bl\b/i.test(f) || (num < 500 && /₹|inr/i.test(f))) {
-      return roundLpa(num);
-    }
-    if (/inr|₹/i.test(f) && num >= 100_000) {
-      return roundLpa(num / 100_000);
-    }
-    if (num < 500) return roundLpa(num);
+    const lpa = inrFragmentToLpa(f);
+    if (lpa != null) return lpa;
   }
 
   const bare = parseNumeric(f);
@@ -101,7 +110,9 @@ function isOfferBoundaryLine(line) {
     /^\*\*\d+\.\s/.test(t) ||
     /^#{1,3}\s+\d+\./.test(t) ||
     /^Company\s*:/i.test(t) ||
-    /^Offer\s*\d+\s*[:.\-]/i.test(t)
+    /^Offer\s*\d+\s*[:.\-]/i.test(t) ||
+    /^Offer\s+from\s+/i.test(t) ||
+    /^[A-Z][A-Za-z0-9.&-]+\s+Title\/Level\s*:/i.test(t)
   );
 }
 
@@ -158,6 +169,159 @@ export function extractOfferSection(fullText, ctx) {
   return lines.slice(start, end).join("\n");
 }
 
+export function parseCompanyFromHeader(line) {
+  const t = line.trim();
+  let m = t.match(/^\*\*\d+\.\s*([^—\-–*|]+)/);
+  if (m) return m[1].trim();
+  m = t.match(/^Company\s*:\s*(.+)$/i);
+  if (m) return m[1].trim();
+  m = t.match(/^#{1,3}\s+\d+\.\s*([^—\-–|]+)/);
+  if (m) return m[1].trim();
+  m = t.match(/^([A-Z][A-Za-z0-9.&-]+)\s+Title\/Level\s*:/i);
+  if (m) return m[1].trim();
+  m = t.match(/\boffer\s+from\s+([A-Za-z0-9][A-Za-z0-9.&'-]+)/i);
+  if (m) return m[1].trim();
+  return null;
+}
+
+function blocksFromLineStarts(fullText, lineTest, headerParser) {
+  const lines = fullText.split("\n");
+  const starts = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lineTest(lines[i])) starts.push(i);
+  }
+  if (starts.length === 0) return null;
+  const blocks = [];
+  for (let s = 0; s < starts.length; s++) {
+    const start = starts[s];
+    const end = starts[s + 1] ?? lines.length;
+    const header = lines[start];
+    blocks.push({
+      company: headerParser(header),
+      header,
+      sectionText: lines.slice(start, end).join("\n"),
+    });
+  }
+  return blocks;
+}
+
+function previousNonEmptyIndex(lines, from) {
+  for (let j = from - 1; j >= 0; j--) {
+    if (lines[j].trim()) return j;
+  }
+  return from;
+}
+
+function looksLikeCompanyLabel(line) {
+  const t = (line || "").trim();
+  if (!t || t.length > 40 || t.includes(":")) return false;
+  if (/education|experience|location|salary|bonus|stock|total|catch|prior|compensation|interview|round|overall|finally|questions/i.test(t)) {
+    return false;
+  }
+  return /^[A-Z][A-Za-z0-9.&' -]{1,40}$/.test(t);
+}
+
+/** LeetCode often renders "Uber" and "Title/Level:" on separate lines. */
+function blocksFromTitleLevel(fullText) {
+  const lines = fullText.split("\n");
+  const titleIdx = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (/^Title\/Level\s*:/i.test(lines[i].trim())) titleIdx.push(i);
+  }
+  if (titleIdx.length === 0) return null;
+
+  const blocks = [];
+  for (let s = 0; s < titleIdx.length; s++) {
+    const titleAt = titleIdx[s];
+    const prev = previousNonEmptyIndex(lines, titleAt);
+    const companyLine = lines[prev];
+    const start = looksLikeCompanyLabel(companyLine) ? prev : titleAt;
+    const nextTitle = titleIdx[s + 1];
+    let end = lines.length;
+    if (nextTitle != null) {
+      const nextPrev = previousNonEmptyIndex(lines, nextTitle);
+      end = looksLikeCompanyLabel(lines[nextPrev]) ? nextPrev : nextTitle;
+    }
+    blocks.push({
+      company: looksLikeCompanyLabel(companyLine) ? companyLine.trim() : null,
+      header: lines[titleAt],
+      sectionText: lines.slice(start, end).join("\n"),
+    });
+  }
+  return blocks;
+}
+
+function lineIsPreviousPay(line) {
+  return (
+    /\b(?:current|currently|previous|prior|existing|old|present)\b/i.test(line) &&
+    /\b(?:ctc|tc|salary|package|compensation|comp|pay|in-?hand|drawing)\b/i.test(
+      line,
+    )
+  );
+}
+
+function windowHasPay(lines, start) {
+  const chunk = lines.slice(start, start + 10).join("\n");
+  return /\b(?:base|salary|fixed|ctc|package|total\s*comp|title\/level)\b/i.test(
+    chunk,
+  );
+}
+
+/** "Google" then Salary/Base within a few lines — a second company starts a new offer. */
+function blocksFromCompanyPay(fullText) {
+  const lines = fullText.split("\n");
+  const starts = [];
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    const companyish =
+      looksLikeCompanyLabel(t) || /^offer\s+from\s+\S+/i.test(t);
+    if (!companyish || lineIsPreviousPay(t)) continue;
+    if (!windowHasPay(lines, i)) continue;
+    if (starts.length && i - starts[starts.length - 1] < 3) continue;
+    starts.push(i);
+  }
+  if (starts.length < 2) return null;
+  const blocks = [];
+  for (let s = 0; s < starts.length; s++) {
+    const start = starts[s];
+    const end = starts[s + 1] ?? lines.length;
+    const header = lines[start].trim();
+    blocks.push({
+      company: parseCompanyFromHeader(header) || header.replace(/:$/, ""),
+      header,
+      sectionText: lines.slice(start, end).join("\n"),
+    });
+  }
+  return blocks;
+}
+
+/** Split a post into per-offer sections (multi-company threads). */
+export function detectOfferBlocks(fullText) {
+  if (!fullText?.trim()) return [];
+
+  const companyPay = blocksFromCompanyPay(fullText);
+  if (companyPay?.length >= 2) return companyPay;
+
+  const splitTitles = blocksFromTitleLevel(fullText);
+  if (splitTitles?.length) return splitTitles;
+
+  const titleLevel = blocksFromLineStarts(
+    fullText,
+    (line) => /^[A-Z][A-Za-z0-9.&-]+\s+Title\/Level\s*:/i.test(line.trim()),
+    parseCompanyFromHeader,
+  );
+  if (titleLevel && titleLevel.length >= 1) return titleLevel;
+
+  const numbered = blocksFromLineStarts(
+    fullText,
+    (line) => isOfferBoundaryLine(line),
+    parseCompanyFromHeader,
+  );
+  if (numbered && numbered.length >= 1) return numbered;
+
+  return [{ company: null, header: null, sectionText: fullText }];
+}
+
 function firstLineMatch(text, patterns) {
   const lines = text.split("\n");
   for (const line of lines) {
@@ -167,6 +331,109 @@ function firstLineMatch(text, patterns) {
     }
   }
   return null;
+}
+
+function firstLineMatchFiltered(text, patterns, lineFilter) {
+  const lines = text.split("\n");
+  for (const line of lines) {
+    if (lineFilter && !lineFilter(line)) continue;
+    for (const re of patterns) {
+      const m = line.match(re);
+      if (m) return { line, match: m };
+    }
+  }
+  return null;
+}
+
+/**
+ * Drop previous-job pay so free-text posts don't mix "current CTC" with the offer.
+ * Only labeled amounts are read. YOE, interview rounds, and notice period are ignored.
+ */
+function withoutPreviousComp(text) {
+  return text
+    .split("\n")
+    .map((line) =>
+      line.replace(
+        /\b(?:current|previous|prior|existing|old|currently)\s+(?:company\s*:\s*[A-Za-z0-9 .&'-]{1,40}\s*)?(?:ctc|tc|salary|package|compensation|comp|pay|in-?hand)\s*(?:is|was|of|:|=|~|-)?\s*(?:₹|rs\.?|inr|about|around|approx\.?|~)?\s*[\d,.]+\s*(?:lpa|l\b|lac|lakhs?|cr|crore|k)?(?:\s*\([^)]*\))?/gi,
+        " ",
+      ),
+    )
+    .join("\n");
+}
+
+function isNonOfferTotalLine(line) {
+  return /current\s*(?:tc|ctc)|previous\s*(?:tc|ctc)|existing\s*(?:tc|ctc)|prior\s*(?:tc|ctc)|old\s*(?:tc|ctc)/i.test(
+    line,
+  );
+}
+
+function amountOnPayLine(line) {
+  const labeled = [
+    /\bbase(?:\s*salary)?\s*[:=~\-]?\s*(.+)$/i,
+    /\bsalary\s*[:=~\-]?\s*(.+)$/i,
+    /\bfixed(?:\s*(?:pay|salary|component))?\s*[:=~\-]?\s*(.+)$/i,
+  ];
+  for (const re of labeled) {
+    const m = line.match(re);
+    if (!m) continue;
+    if (/\bsalary\b/i.test(line) && /\bbase\b/i.test(line) && re.source.startsWith("\\bsalary")) {
+      continue;
+    }
+    const v = parseLpaFromCompLine(m[1], null);
+    if (v != null && v > 0 && v < 500) return v;
+  }
+  const trail = line.match(/(\d+(?:\.\d+)?)\s*(?:lpa|l)\b[^\n]{0,12}\b(?:base|fixed)\b/i);
+  if (trail) return roundLpa(parseFloat(trail[1]));
+  return null;
+}
+
+function extractBaseFromSection(sectionText) {
+  for (const line of sectionText.split("\n")) {
+    if (lineIsPreviousPay(line)) continue;
+    const v = amountOnPayLine(line);
+    if (v != null) return v;
+  }
+  return null;
+}
+
+function parseLpaFromCompLine(capture, baseLpa) {
+  const range = capture.match(/(\d+(?:\.\d+)?)\s*[–-]\s*(\d+(?:\.\d+)?)/);
+  if (range) {
+    return roundLpa((parseFloat(range[1]) + parseFloat(range[2])) / 2);
+  }
+  return amountFragmentToLpa(capture, baseLpa);
+}
+
+function extractTotalFromSection(sectionText, baseLpa) {
+  const lines = sectionText.split("\n");
+  const totalPriorities = [
+    /\bfirst\s*year\s*tc[^:]*[:=~]\s*(.+)$/i,
+    /\bestimated\s*total\s*compensation(?:\s*\([^)]*\))?\s*[:=~]\s*(.+)$/i,
+    /\btotal\s*comp(?:ensation)?\s*(?:\([^)]*\))?\s*[:=~]\s*(.+)$/i,
+    /\btotal\s*compensation(?:\s*\([^)]*\))?\s*[:=~]\s*(.+)$/i,
+    /\btc\s*[:=~]\s*(.+)$/i,
+    /\btotal\s*(?:comp(?:ensation)?)?\s*[:=~]\s*(.+)$/i,
+    /\bctc\s*[:=~]\s*(.+)$/i,
+  ];
+
+  for (const re of totalPriorities) {
+    for (const line of lines) {
+      if (isNonOfferTotalLine(line) || lineIsPreviousPay(line)) continue;
+      const m = line.match(re);
+      if (!m) continue;
+      const totalLpa = parseLpaFromCompLine(m[1], baseLpa);
+      if (totalLpa != null) return totalLpa;
+    }
+  }
+  return null;
+}
+
+/** Base / total (CTC) from a single offer section. */
+export function extractBaseTotalFromSection(sectionText) {
+  const offerText = withoutPreviousComp(sectionText);
+  const baseLpa = extractBaseFromSection(offerText);
+  const totalLpa = extractTotalFromSection(offerText, baseLpa);
+  return { baseLpa, totalLpa };
 }
 
 function amountFromEquityLine(capture, baseLpa) {
@@ -182,10 +449,23 @@ function amountFromEquityLine(capture, baseLpa) {
 }
 
 function extractJoiningBonusLpa(text, baseLpa) {
+  const joiningRs = text.match(
+    /\bjoining\s+bonus\s*:\s*(Rs?\.?\s*[\d,]+(?:\.\d+)?)/i,
+  );
+  if (joiningRs) {
+    const v = inrFragmentToLpa(joiningRs[1]);
+    if (v != null) return v;
+  }
+
+  for (const line of text.split("\n")) {
+    const inline = line.match(/\bjb\s*[:=~]\s*(\d+(?:\.\d+)?)\s*l(?:pa)?/i);
+    if (inline) return roundLpa(parseFloat(inline[1]));
+  }
+
   const hit = firstLineMatch(text, [
     /year\s*1\s*joining\s*bonus\s*[:=\-~]?\s*(.+)$/i,
     /(?:joining|sign[\s-]?on|signing)\s*(?:bonus|booster)?\s*[:=\-–]?\s*(.+)$/i,
-    /(?:jb)\s*[:=\-]?\s*(.+)$/i,
+    /(?:^|\s)(?:jb)\s*[:=\-]?\s*(.+)$/i,
   ]);
   if (!hit) return null;
   if (/joining\s*by|conditional/i.test(hit.line) && !/\d/.test(hit.match[1])) {
@@ -195,6 +475,14 @@ function extractJoiningBonusLpa(text, baseLpa) {
 }
 
 function extractVariableLpa(text, baseLpa) {
+  const annualRs = text.match(
+    /\bannual\s+bonus\s*:\s*(Rs?\.?\s*[\d,]+(?:\.\d+)?)/i,
+  );
+  if (annualRs) {
+    const v = inrFragmentToLpa(annualRs[1]);
+    if (v != null) return v;
+  }
+
   const hit = firstLineMatch(text, [
     /target\s*bonus\s*[:=\-~]?\s*(.+)$/i,
     /(?:target\s*)?(?:annual\s*)?variable(?:\s*pay|\s*comp)?\s*[:=\-~]?\s*(.+)$/i,
@@ -238,6 +526,20 @@ function extractStocksLpa(text, baseLpa) {
   let found = false;
 
   for (const line of lines) {
+    const inlineRe =
+      /\b(?:rsu?s?|esop?s?|stock\s*bonus)\s*[:=~]\s*(\d+(?:\.\d+)?)\s*l(?:pa)?/gi;
+    let inline;
+    let hadInline = false;
+    while ((inline = inlineRe.exec(line)) !== null) {
+      hadInline = true;
+      const v = roundLpa(parseFloat(inline[1]));
+      if (v > 0) {
+        total += v;
+        found = true;
+      }
+    }
+    if (hadInline) continue;
+
     for (const re of patterns) {
       const m = line.match(re);
       if (!m) continue;
@@ -270,36 +572,15 @@ export function extractCompComponents(text, baseLpa, totalLpa, offerContext = nu
     return { ...EMPTY_COMP };
   }
 
-  const scoped =
+  const scoped = withoutPreviousComp(
     offerContext?.company != null && String(offerContext.company).trim()
       ? extractOfferSection(text, offerContext)
-      : text;
+      : text,
+  );
 
-  let joiningBonusLpa = extractJoiningBonusLpa(scoped, baseLpa);
-  let variableLpa = extractVariableLpa(scoped, baseLpa);
-  let stocksLpa = extractStocksLpa(scoped, baseLpa);
-
-  if (totalLpa != null && baseLpa != null && totalLpa > baseLpa + 0.05) {
-    const gap = roundLpa(totalLpa - baseLpa);
-    const sumKnown = roundLpa(
-      [variableLpa, joiningBonusLpa, stocksLpa]
-        .filter((v) => v != null)
-        .reduce((a, b) => a + b, 0),
-    );
-    const missing = [];
-    if (variableLpa == null) missing.push("variable");
-    if (joiningBonusLpa == null) missing.push("joining");
-    if (stocksLpa == null) missing.push("stocks");
-
-    if (missing.length === 1 && Math.abs(gap - sumKnown) > 0.05) {
-      const remainder = roundLpa(gap - sumKnown);
-      if (remainder > 0.05) {
-        if (missing[0] === "variable") variableLpa = remainder;
-        else if (missing[0] === "joining") joiningBonusLpa = remainder;
-        else if (missing[0] === "stocks") stocksLpa = remainder;
-      }
-    }
-  }
+  const joiningBonusLpa = extractJoiningBonusLpa(scoped, baseLpa);
+  const variableLpa = extractVariableLpa(scoped, baseLpa);
+  const stocksLpa = extractStocksLpa(scoped, baseLpa);
 
   return { variableLpa, joiningBonusLpa, stocksLpa };
 }

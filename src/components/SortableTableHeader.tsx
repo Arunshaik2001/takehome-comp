@@ -94,6 +94,40 @@ function SortControls({
   );
 }
 
+export function SortField({
+  label,
+  ascKey,
+  descKey,
+  sortKey,
+  onSort,
+}: {
+  label: string;
+  ascKey: SortKey;
+  descKey: SortKey;
+  sortKey: SortKey;
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sortKey === ascKey || sortKey === descKey;
+  return (
+    <div
+      className={`inline-flex shrink-0 items-center rounded-lg border px-2.5 py-1.5 text-xs font-medium ${
+        active
+          ? "border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
+          : "border-stone-200 bg-white text-stone-600 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300"
+      }`}
+    >
+      <SortControls
+        label={label}
+        ascKey={ascKey}
+        descKey={descKey}
+        sortKey={sortKey}
+        onSort={onSort}
+        align="left"
+      />
+    </div>
+  );
+}
+
 export function SortableTableHeader({
   label,
   ascKey,

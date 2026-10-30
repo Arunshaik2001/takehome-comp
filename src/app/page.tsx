@@ -65,8 +65,9 @@ export default function Home() {
               <ul className="mt-3 list-inside list-disc space-y-2 text-sm leading-relaxed text-stone-300 marker:text-stone-500">
                 <li>
                   India new tax regime (FY 2025–26), ₹75,000 standard deduction,
-                  employee PF on the statutory wage ceiling, and professional tax
-                  where applicable.
+                  4% health &amp; education cess on income tax, employee PF on
+                  the statutory wage ceiling, and professional tax where
+                  applicable.
                 </li>
                 <li>
                   Year-1 net pay includes fixed base salary plus parsed joining

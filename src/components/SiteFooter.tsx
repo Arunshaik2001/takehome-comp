@@ -50,8 +50,8 @@ export function SiteFooter() {
         <p className="mt-2">
           All in-hand figures are illustrative estimates only. Models use
           simplified assumptions (for example: India new tax regime FY 2025–26,
-          standard deduction, employee PF on a wage ceiling, and typical
-          professional tax). Your actual payslip depends on salary structure,
+          standard deduction, 4% health &amp; education cess on tax, employee PF
+          on a wage ceiling, and typical professional tax). Your actual payslip depends on salary structure,
           city, regime choice, investments, and employer policies. Nothing on
           this site is tax, legal, investment, or employment advice. Consult a
           qualified chartered accountant or employer HR before making decisions.

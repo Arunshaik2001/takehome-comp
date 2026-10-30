@@ -13,9 +13,9 @@ import { PostedCompBlock } from "@/components/PostedCompBlock";
 import {
   SortableTableHeader,
   SortableTableHeaderLeft,
+  SortField,
 } from "@/components/SortableTableHeader";
 import {
-  SORT_LABELS,
   type SortKey,
   buildFilterOptions,
   defaultFilters,
@@ -391,19 +391,6 @@ export function OffersExplorer({ offers }: { offers: CompensationOffer[] }) {
                 unit=" yrs"
               />
             </div>
-            <label className="block min-w-0 md:hidden">
-              <span className={labelClass}>Sort (mobile)</span>
-              <FilterSelect
-                value={sortKey}
-                onChange={(e) => applySort(e.target.value as SortKey)}
-              >
-                {(Object.keys(SORT_LABELS) as SortKey[]).map((key) => (
-                  <option key={key} value={key}>
-                    {SORT_LABELS[key]}
-                  </option>
-                ))}
-              </FilterSelect>
-            </label>
           </div>
           <button
             type="button"
@@ -414,6 +401,56 @@ export function OffersExplorer({ offers }: { offers: CompensationOffer[] }) {
           </button>
         </div>
       ) : null}
+
+      <div className="border-b border-stone-100 px-4 py-3 md:hidden dark:border-stone-800">
+        <p className="text-sm font-medium text-stone-700 dark:text-stone-300">
+          Order by
+        </p>
+        <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          <SortField
+            label="Company"
+            ascKey="company-asc"
+            descKey="company-desc"
+            sortKey={sortKey}
+            onSort={applySort}
+          />
+          <SortField
+            label="Posted"
+            ascKey="date-asc"
+            descKey="date-desc"
+            sortKey={sortKey}
+            onSort={applySort}
+          />
+          <SortField
+            label="Posted comp"
+            ascKey="ctc-asc"
+            descKey="ctc-desc"
+            sortKey={sortKey}
+            onSort={applySort}
+          />
+          <SortField
+            label="In-hand"
+            ascKey="inhand-asc"
+            descKey="inhand-desc"
+            sortKey={sortKey}
+            onSort={applySort}
+          />
+          <SortField
+            label="Deductions"
+            ascKey="deduction-asc"
+            descKey="deduction-desc"
+            sortKey={sortKey}
+            onSort={applySort}
+          />
+          <SortField
+            label="Experience"
+            ascKey="yoe-asc"
+            descKey="yoe-desc"
+            sortKey={sortKey}
+            onSort={applySort}
+          />
+        </div>
+      </div>
 
       <div className="space-y-3 p-4 md:hidden">
         {pageOffers.length === 0 ? (
