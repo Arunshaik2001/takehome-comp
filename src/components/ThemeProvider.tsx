@@ -10,6 +10,7 @@ import {
 } from "react";
 import {
   applyThemeClass,
+  DEFAULT_THEME,
   resolveThemeChoice,
   systemPrefersDark,
   THEME_STORAGE_KEY,
@@ -29,7 +30,7 @@ function readTheme(): Theme {
   if (stored === "light" || stored === "dark" || stored === "system") {
     return stored;
   }
-  return "system";
+  return DEFAULT_THEME;
 }
 
 function subscribeTheme(onStoreChange: () => void) {
@@ -51,7 +52,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const theme = useSyncExternalStore(
     subscribeTheme,
     readTheme,
-    (): Theme => "system",
+    (): Theme => DEFAULT_THEME,
   );
 
   const systemDark = useSyncExternalStore(

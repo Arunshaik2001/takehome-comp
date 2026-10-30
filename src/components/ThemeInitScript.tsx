@@ -1,11 +1,11 @@
-import { THEME_STORAGE_KEY } from "@/lib/theme";
+import { DEFAULT_THEME, THEME_STORAGE_KEY } from "@/lib/theme";
 
 const themeInitScript = `
 (function () {
   try {
     var key = ${JSON.stringify(THEME_STORAGE_KEY)};
     var stored = localStorage.getItem(key);
-    var theme = stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
+    var theme = stored === "light" || stored === "dark" || stored === "system" ? stored : ${JSON.stringify(DEFAULT_THEME)};
     var resolved =
       theme === "dark" ||
       (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches)

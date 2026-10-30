@@ -1,6 +1,7 @@
 export type Theme = "light" | "dark" | "system";
 
 export const THEME_STORAGE_KEY = "takehome-comp-theme";
+export const DEFAULT_THEME: Theme = "dark";
 
 export function systemPrefersDark(): boolean {
   if (typeof window === "undefined") return false;
