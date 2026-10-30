@@ -19,15 +19,17 @@ npm run build        # data:build + production Next.js build
 npm run dev
 ```
 
-## Deploy (e.g. Vercel)
+## Deploy
 
-1. Push the repo to GitHub (or connect your git host).
-2. Import the project in [Vercel](https://vercel.com); framework preset **Next.js**.
-3. Build command: `npm run build` (runs `data:build` then `next build` per `package.json`).
-4. No environment variables required for the static dataset path.
-5. Re-deploy or run `data:build` in CI when you want fresher LeetCode-sourced data.
+### GitHub Pages (live)
 
-Ensure production displays the site footer (legal disclaimers) on the home page before going live.
+**https://arunshaik2001.github.io/takehome-comp/**
+
+Pushes to `main` run [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) (`npm run build:pages`).
+
+### Vercel (optional custom domain)
+
+Import [github.com/Arunshaik2001/takehome-comp](https://github.com/Arunshaik2001/takehome-comp) in Vercel; build with `npm run build` (no `GITHUB_PAGES` env).
 
 ## Data pipeline
 

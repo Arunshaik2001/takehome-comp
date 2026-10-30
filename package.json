@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "npm run data:build && next build",
+    "build:pages": "npm run data:build && GITHUB_PAGES=true next build",
     "start": "next start",
     "lint": "eslint",
     "data:build": "node scripts/build-data.mjs"
