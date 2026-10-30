@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 const siteUrl = process.env.GITHUB_PAGES
-  ? "https://arunshaik2001.github.io/takehome-comp"
+  ? "https://takehomecomp.in"
   : "http://localhost:3000";
 
 export const metadata: Metadata = {
