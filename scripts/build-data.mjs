@@ -213,9 +213,13 @@ function transformRecord(rec, postTextById) {
   }
 
   const postText = postTextById?.get(rec.id) ?? "";
+  const offerContext = {
+    company: rec["company-normalized"] || rec.company || "",
+    role: rec["role-normalized"] || rec.role || "",
+  };
   const compComponents =
     currency === "INR"
-      ? extractCompComponents(postText, baseLpa, totalLpa)
+      ? extractCompComponents(postText, baseLpa, totalLpa, offerContext)
       : { variableLpa: null, joiningBonusLpa: null, stocksLpa: null };
 
   let takeHome = null;

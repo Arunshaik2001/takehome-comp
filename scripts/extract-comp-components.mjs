@@ -23,8 +23,11 @@ function amountFragmentToLpa(fragment, baseLpa, { perYearUsd = false, totalUsdVe
   }
 
   if (/\$|usd|eur|euro/i.test(f)) {
-    const num = parseNumeric(f);
+    let num = parseNumeric(f);
     if (num == null) return null;
+    if (/\d\s*k\b/i.test(f.replace(/,/g, "")) || /\d\s*k\b/i.test(lower)) {
+      num *= 1000;
+    }
     const isEur = /eur|euro/i.test(f);
     const rate = isEur ? 90 : USD_TO_INR;
     let annualUsd = num;
@@ -64,6 +67,97 @@ function amountFragmentToLpa(fragment, baseLpa, { perYearUsd = false, totalUsdVe
   return null;
 }
 
+function normalizeCompanyKey(s) {
+  return (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+/** Search terms for locating one offer block inside a multi-company post. */
+function companySearchTerms(company) {
+  const normalized = normalizeCompanyKey(company);
+  const terms = new Set();
+  if (normalized) terms.add(normalized);
+  for (const p of normalized.split(/\s+/).filter((p) => p.length >= 4)) {
+    terms.add(p);
+  }
+  return [...terms];
+}
+
+function lineHasPrimaryCompany(line, company) {
+  const primary = normalizeCompanyKey(company);
+  if (!primary) return false;
+  const l = line.toLowerCase();
+  if (l.includes(primary)) return true;
+  const first = primary.split(/\s+/)[0];
+  return first.length >= 4 && l.includes(first);
+}
+
+function lineHasCompany(line, terms, company) {
+  return lineHasPrimaryCompany(line, company);
+}
+
+function isOfferBoundaryLine(line) {
+  const t = line.trim();
+  return (
+    /^\*\*\d+\.\s/.test(t) ||
+    /^#{1,3}\s+\d+\./.test(t) ||
+    /^Company\s*:/i.test(t) ||
+    /^Offer\s*\d+\s*[:.\-]/i.test(t)
+  );
+}
+
+function lineMatchesOfferHeader(line, terms, company) {
+  const t = line.trim();
+  if (!lineHasPrimaryCompany(line, company)) return false;
+  if (/^\*\*\d+\.\s/.test(t)) return true;
+  if (/^\*\*[^*]+—/.test(t) || /^\*\*[^*]+\*\*/.test(t)) return true;
+  if (/^Company\s*:/i.test(t)) return true;
+  if (/^#{1,3}\s/.test(t)) return true;
+  return false;
+}
+
+/**
+ * Limit parsing to the offer block for one company (multi-offer posts).
+ * @param {string} fullText
+ * @param {{ company?: string, role?: string }} ctx
+ */
+export function extractOfferSection(fullText, ctx) {
+  if (!fullText?.trim() || !ctx?.company) return fullText ?? "";
+
+  const terms = companySearchTerms(ctx.company);
+  const lines = fullText.split("\n");
+
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lineMatchesOfferHeader(lines[i], terms, ctx.company)) {
+      start = i;
+      break;
+    }
+  }
+
+  if (start < 0) {
+    for (let i = 0; i < lines.length; i++) {
+      if (!lineHasPrimaryCompany(lines[i], ctx.company)) continue;
+      const window = lines.slice(i, Math.min(lines.length, i + 12)).join("\n");
+      if (/base|ctc|tc|lpa|lakh|lac|₹|rsu|bonus|fixed|comp/i.test(window)) {
+        start = i;
+        break;
+      }
+    }
+  }
+
+  if (start < 0) return fullText;
+
+  let end = lines.length;
+  for (let j = start + 1; j < lines.length; j++) {
+    if (!isOfferBoundaryLine(lines[j])) continue;
+    if (lineMatchesOfferHeader(lines[j], terms, ctx.company)) continue;
+    end = j;
+    break;
+  }
+
+  return lines.slice(start, end).join("\n");
+}
+
 function firstLineMatch(text, patterns) {
   const lines = text.split("\n");
   for (const line of lines) {
@@ -79,7 +173,7 @@ function amountFromEquityLine(capture, baseLpa) {
   const frag = capture;
   const perYear = /per\s*year|\/\s*yr|each\s*year|annual/i.test(frag);
   let vestYears = null;
-  const vestM = frag.match(/(?:over|vest(?:ed)?(?:\s*equally)?\s*over?)\s*(\d+)\s*year/i);
+  const vestM = frag.match(/(?:\/|over|vest(?:ed)?(?:\s*equally)?\s*over?)\s*(\d+)\s*year/i);
   if (vestM) vestYears = parseInt(vestM[1], 10);
   return amountFragmentToLpa(frag, baseLpa, {
     perYearUsd: perYear,
@@ -89,6 +183,7 @@ function amountFromEquityLine(capture, baseLpa) {
 
 function extractJoiningBonusLpa(text, baseLpa) {
   const hit = firstLineMatch(text, [
+    /year\s*1\s*joining\s*bonus\s*[:=\-~]?\s*(.+)$/i,
     /(?:joining|sign[\s-]?on|signing)\s*(?:bonus|booster)?\s*[:=\-–]?\s*(.+)$/i,
     /(?:jb)\s*[:=\-]?\s*(.+)$/i,
   ]);
@@ -101,13 +196,19 @@ function extractJoiningBonusLpa(text, baseLpa) {
 
 function extractVariableLpa(text, baseLpa) {
   const hit = firstLineMatch(text, [
+    /target\s*bonus\s*[:=\-~]?\s*(.+)$/i,
     /(?:target\s*)?(?:annual\s*)?variable(?:\s*pay|\s*comp)?\s*[:=\-~]?\s*(.+)$/i,
     /performance\s*(?:bonus|pay)\s*[:=\-~]?\s*(.+)$/i,
     /variable\s*[:=\-~]\s*(.+)$/i,
     /(?:target\s*)?annual\s*bonus\s*[:=\-~]?\s*(.+)$/i,
+    /bonus\s*[:=\-~]\s*~?\s*(\d+(?:\.\d+)?)\s*%/i,
   ]);
   if (hit) {
     if (/joining|signing|sign[\s-]?on/i.test(hit.line)) return null;
+    if (/bonus\s*[:=\-~]?\s*~?\s*(\d+(?:\.\d+)?)\s*%/i.test(hit.line) && baseLpa != null) {
+      const pct = parseFloat(hit.match[1]);
+      return roundLpa((baseLpa * pct) / 100);
+    }
     const v = amountFragmentToLpa(hit.match[1], baseLpa);
     if (v != null) return v;
   }
@@ -126,7 +227,7 @@ function extractStocksLpa(text, baseLpa) {
   const patterns = [
     /(?:esop|esops)\s*[:=\-~]?\s*(.+)$/i,
     /employee\s*stock\s*(?:option|ownership)?\s*(?:plan|scheme)?\s*[:=\-~]?\s*(.+)$/i,
-    /\brsu?s?\b\s*[:=\-~]?\s*(.+)$/i,
+    /\brsus?\b\s*[:=\-~]?\s*(.+)$/i,
     /restricted\s*stock\s*(?:units?|grant)?\s*[:=\-~]?\s*(.+)$/i,
     /stock\s*(?:bonus|grant|options?)\s*[:=\-~]?\s*(.+)$/i,
     /equity\s*[:=\-~]?\s*(.+)$/i,
@@ -162,15 +263,21 @@ const EMPTY_COMP = {
  * @param {string} text Post title + content
  * @param {number|null} baseLpa
  * @param {number|null} totalLpa
+ * @param {{ company?: string, role?: string }|null} offerContext
  */
-export function extractCompComponents(text, baseLpa, totalLpa) {
+export function extractCompComponents(text, baseLpa, totalLpa, offerContext = null) {
   if (!text?.trim()) {
     return { ...EMPTY_COMP };
   }
 
-  let joiningBonusLpa = extractJoiningBonusLpa(text, baseLpa);
-  let variableLpa = extractVariableLpa(text, baseLpa);
-  let stocksLpa = extractStocksLpa(text, baseLpa);
+  const scoped =
+    offerContext?.company != null && String(offerContext.company).trim()
+      ? extractOfferSection(text, offerContext)
+      : text;
+
+  let joiningBonusLpa = extractJoiningBonusLpa(scoped, baseLpa);
+  let variableLpa = extractVariableLpa(scoped, baseLpa);
+  let stocksLpa = extractStocksLpa(scoped, baseLpa);
 
   if (totalLpa != null && baseLpa != null && totalLpa > baseLpa + 0.05) {
     const gap = roundLpa(totalLpa - baseLpa);
