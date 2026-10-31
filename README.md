@@ -25,7 +25,9 @@ npm run dev
 
 **https://arunshaik2001.github.io/takehome-comp/**
 
-Pushes to `main` run [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) (`npm run build:pages`).
+Pushes to `main` run [.github/workflows/deploy-pages.yml](.github/workflows/deploy-pages.yml) (`npm run build:pages`). The same workflow also runs **once per day** (06:00 IST) to re-download parsed comp data and redeploy.
+
+To change the schedule, edit the `schedule.cron` line in that workflow ([cron syntax](https://docs.github.com/en/actions/writing-workflows/scheduled-triggers), UTC). You can run it anytime from **Actions → Deploy to GitHub Pages → Run workflow**.
 
 ### Vercel (optional custom domain)
 
