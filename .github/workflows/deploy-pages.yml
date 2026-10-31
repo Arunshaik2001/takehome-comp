@@ -55,6 +55,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
         run: uv run leetcomp-sync --provider github_models
 
+      - name: Supplement parsed posts when LLM parse misses
+        run: node scripts/supplement-parsed-posts.mjs leetcomp/data
+
       - name: Commit synced data to fork
         working-directory: leetcomp
         env:
