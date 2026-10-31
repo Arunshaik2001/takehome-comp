@@ -39,9 +39,9 @@ Add a repository secret on **takehome-comp** (and on **leetcode-compensation** i
 
 | Secret | Value |
 |--------|--------|
-| `GH_TOKEN` | Personal access token with **`repo`** scope (classic) or **Contents: Read and write** on `Arunshaik2001/leetcode-compensation` (fine-grained). Used to push synced JSONL to your fork and to call **GitHub Models** for parsing new posts. |
+| `GH_TOKEN` | Personal access token with **`repo`** scope (classic) or **Contents: Read and write** on `Arunshaik2001/leetcode-compensation` (fine-grained). Used to **push** synced JSONL to your fork between runs. |
 
-Without `GH_TOKEN`, the workflow still syncs in the runner and deploys fresh data for that run, but **cannot push** updates back to the fork (the next run starts from the last committed JSONL again).
+The workflow uses the built-in `GITHUB_TOKEN` (with `models: read`) for **GitHub Models** parsing during sync. Add `GH_TOKEN` only if you want synced files committed to the fork (recommended so local `npm run data:build` stays current too).
 
 Create the secret: **Settings → Secrets and variables → Actions → New repository secret**.
 
