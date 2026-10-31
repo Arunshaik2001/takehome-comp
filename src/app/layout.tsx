@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { CloudflareAnalytics } from "@/components/CloudflareAnalytics";
 import { ThemeInitScript } from "@/components/ThemeInitScript";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import "./globals.css";
@@ -51,6 +52,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground">
         <ThemeProvider>{children}</ThemeProvider>
+        <CloudflareAnalytics />
       </body>
     </html>
   );
