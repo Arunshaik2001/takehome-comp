@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-  # Daily refresh + deploy at 06:00 IST (00:30 UTC). Cron uses UTC only.
+  # Daily: sync LeetCode comp data, then build + deploy (06:00 IST = 00:30 UTC).
   schedule:
     - cron: "30 0 * * *"
 
@@ -17,11 +17,61 @@ concurrency:
   group: pages
   cancel-in-progress: true
 
+env:
+  LEETCOMP_REPO: Arunshaik2001/leetcode-compensation
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout site
+        uses: actions/checkout@v4
+
+      - name: Checkout leetcomp data repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.LEETCOMP_REPO }}
+          token: ${{ secrets.GH_TOKEN || github.token }}
+          path: leetcomp
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.13
+        working-directory: leetcomp
+
+      - name: Install leetcomp
+        run: uv sync
+        working-directory: leetcomp
+
+      - name: Sync compensation posts from LeetCode
+        working-directory: leetcomp
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: uv run leetcomp-sync --provider github_models
+
+      - name: Commit synced data to fork
+        working-directory: leetcomp
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+        run: |
+          if [ -z "${GH_TOKEN}" ]; then
+            echo "GH_TOKEN secret not set — skipping push to ${LEETCOMP_REPO} (this run still uses freshly synced files)."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          if git diff --staged --quiet; then
+            echo "No data file changes to push."
+          else
+            git commit -m "chore(data): automated sync $(date -u +%Y-%m-%dT%H:%MZ)"
+            git push "https://x-access-token:${GH_TOKEN}@github.com/${LEETCOMP_REPO}.git" HEAD:master
+          fi
 
       - uses: actions/setup-node@v4
         with:
@@ -35,6 +85,7 @@ jobs:
         run: npm run build:pages
         env:
           GITHUB_PAGES: "true"
+          LEETCOMP_DATA_DIR: ${{ github.workspace }}/leetcomp/data
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

@@ -17,10 +17,22 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, "..");
 const OUT = path.join(ROOT, "src/data/offers.json");
 const WINDOW_DAYS = 365;
-const PARSED_URL =
-  "https://raw.githubusercontent.com/0xku/leetcode-compensation/master/data/parsed_posts.jsonl";
-const POSTS_URL =
-  "https://raw.githubusercontent.com/0xku/leetcode-compensation/master/data/posts.jsonl";
+const DATA_REPO =
+  process.env.LEETCOMP_DATA_REPO ?? "Arunshaik2001/leetcode-compensation";
+const DATA_BRANCH = process.env.LEETCOMP_DATA_BRANCH ?? "master";
+const LOCAL_DATA_DIR = process.env.LEETCOMP_DATA_DIR
+  ? path.resolve(process.env.LEETCOMP_DATA_DIR)
+  : null;
+
+function dataFile(name) {
+  if (LOCAL_DATA_DIR) {
+    return path.join(LOCAL_DATA_DIR, name);
+  }
+  return `https://raw.githubusercontent.com/${DATA_REPO}/${DATA_BRANCH}/data/${name}`;
+}
+
+const PARSED_SOURCE = dataFile("parsed_posts.jsonl");
+const POSTS_SOURCE = dataFile("posts.jsonl");
 
 const LEETCODE_GRAPHQL = "https://leetcode.com/graphql/";
 const LIST_QUERY = {
@@ -186,11 +198,18 @@ async function fetchLeetcodeTotal() {
   return json?.data?.ugcArticleDiscussionArticles?.totalNum ?? null;
 }
 
+async function loadTextSource(source, label) {
+  if (source.startsWith("http://") || source.startsWith("https://")) {
+    const res = await fetch(source);
+    if (!res.ok) throw new Error(`Failed to download ${label}: ${res.status}`);
+    return res.text();
+  }
+  return fs.readFileSync(source, "utf8");
+}
+
 async function loadPostTextById() {
-  console.log("Fetching raw post text for comp breakdown...");
-  const res = await fetch(POSTS_URL);
-  if (!res.ok) throw new Error(`Failed to download posts: ${res.status}`);
-  const text = await res.text();
+  console.log(`Loading raw post text for comp breakdown (${POSTS_SOURCE})...`);
+  const text = await loadTextSource(POSTS_SOURCE, "posts.jsonl");
   const map = new Map();
   for (const line of text.split("\n")) {
     if (!line.trim()) continue;
@@ -215,10 +234,10 @@ async function main() {
 
   const postTextById = await loadPostTextById();
 
-  console.log(`Fetching parsed LeetCode comp posts (${WINDOW_DAYS}d window)...`);
-  const res = await fetch(PARSED_URL);
-  if (!res.ok) throw new Error(`Failed to download parsed posts: ${res.status}`);
-  const text = await res.text();
+  console.log(
+    `Loading parsed LeetCode comp posts (${WINDOW_DAYS}d window) from ${PARSED_SOURCE}...`,
+  );
+  const text = await loadTextSource(PARSED_SOURCE, "parsed_posts.jsonl");
 
   const offers = [];
   let scanned = 0;
@@ -249,8 +268,9 @@ async function main() {
   const dataset = {
     generatedAt: new Date().toISOString(),
     windowDays: WINDOW_DAYS,
-    source:
-      "LeetCode Discuss #compensation (parsed); synced via open leetcomp pipeline JSONL",
+    source: LOCAL_DATA_DIR
+      ? `LeetCode Discuss #compensation (parsed); local leetcomp data at ${LOCAL_DATA_DIR}`
+      : `LeetCode Discuss #compensation (parsed); synced via ${DATA_REPO} JSONL`,
     leetcodeCompPostsTotal: leetcodeTotal,
     parsedRecordsScanned: scanned,
     offerCount: offers.length,
